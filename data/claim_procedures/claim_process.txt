@@ -1,0 +1,59 @@
+MOTOR CLAIM PROCESS
+
+1. CLAIM NOTIFICATION
+
+The insured should notify the insurer as soon as reasonably possible after the incident.
+
+2. CLAIM REGISTRATION
+
+The claim is registered using:
+
+- Policy number
+- Claimant details
+- Incident date
+- Incident location
+- Incident description
+- Estimated claim amount
+
+3. DOCUMENT COLLECTION
+
+Required documents may include:
+
+- Claim form
+- Registration certificate
+- Driving licence
+- Policy copy
+- Photographs
+- Repair estimate
+- Police report
+- Surveyor report
+
+4. COVERAGE REVIEW
+
+The claim is checked against:
+
+- Policy coverage
+- Active endorsements
+- Exclusions
+- Policy validity
+- Claim amount
+- Supporting evidence
+
+5. DECISION
+
+The claim may be categorized as:
+
+- Approved
+- Claim Not Covered
+- Manual Review Required
+
+6. MANUAL REVIEW CONDITIONS
+
+Manual review is required when:
+
+- Required documents are missing.
+- The incident description is insufficient.
+- The claim amount needs surveyor verification.
+- Fraud indicators are present.
+- Policy clauses conflict.
+- The agent has low confidence.

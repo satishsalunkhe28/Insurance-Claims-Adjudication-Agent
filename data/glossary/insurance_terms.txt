@@ -1,0 +1,41 @@
+INSURANCE GLOSSARY
+
+POLICY
+
+A contract between the insurer and the insured.
+
+INSURED
+
+The person or vehicle protected by the insurance policy.
+
+PREMIUM
+
+The amount paid for insurance coverage.
+
+ENDORSEMENT
+
+An additional benefit or modification attached to the base policy.
+
+EXCLUSION
+
+A circumstance or event that the policy does not cover.
+
+DEDUCTIBLE
+
+The amount the insured must pay before the insurer contributes.
+
+COVERAGE LIMIT
+
+The maximum amount payable under the policy.
+
+CLAIM
+
+A request made to the insurer for payment or support after a loss.
+
+CLAIM ADJUDICATION
+
+The process of checking a claim against policy terms and deciding whether it should be approved, denied, or reviewed manually.
+
+MANUAL REVIEW
+
+A review performed by a human claims officer when the automated system cannot make a reliable decision.
