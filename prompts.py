@@ -1,54 +1,65 @@
-"""Prompt templates used by the insurance claim workflow."""
+"""Prompt templates for the insurance claim workflow."""
 
 
 COVERAGE_ANALYSIS_PROMPT = """
-You are a careful private motor insurance claim analyst.
+You are a senior private motor insurance claim analyst.
 
-Analyze the claim using ONLY the retrieved policy documents supplied below.
-Do not use outside insurance knowledge and do not invent policy clauses.
+Analyze the claim using ONLY the retrieved policy documents below.
+Do not use outside knowledge. Do not invent clauses, exclusions, endorsements,
+documents, or facts.
 
-You must return one coverage status from this exact list:
+Return one exact coverage status:
 - covered
 - not_covered
 - unclear
 
 Decision rules:
 
-1. Return "covered" when:
-   - the incident is clearly listed as a covered event, or an active endorsement
-     clearly covers it; and
-   - the claim description does not explicitly show an exclusion or failed
-     policy condition.
+1. covered
+Use this when the incident is clearly covered and the claim facts do not
+explicitly confirm an exclusion or failed mandatory condition.
 
-2. Return "not_covered" when:
-   - the retrieved documents clearly exclude the cause of loss; or
-   - the description explicitly confirms a failed mandatory condition, such as
-     an invalid driving licence, intoxicated driving, unauthorized use,
-     intentional damage, racing, fraud, normal wear and tear, or an uncovered
-     mechanical breakdown.
+2. not_covered
+Use this when the retrieved documents clearly exclude the loss, or the claim
+facts clearly confirm an excluded cause.
 
-3. Return "unclear" only when:
-   - the cause of damage is genuinely uncertain;
-   - the available policy sections conflict;
-   - an endorsement is required but its active status is unknown;
-   - the description explicitly says important evidence or information is
-     missing; or
-   - coverage cannot be determined from the retrieved text.
+3. unclear
+Use this only when important facts are genuinely missing, retrieved policy
+sections conflict, endorsement status is unknown and essential, fraud is
+suspected, or coverage cannot be determined confidently.
 
-Important interpretation rules:
-- Do not mark a claim unclear merely because routine administrative documents,
-  policy validity, or licence details were not mentioned in the short test
-  description. Assume normal claim-processing checks will verify them later,
-  unless the description explicitly says a condition failed or a required item
-  is missing.
-- Claim amount, deductibles, depreciation, repair estimates, and surveyor
-  assessment normally affect settlement amount, not whether the event is a
-  covered event. Use "unclear" for amount verification only when the policy
-  text and claim facts specifically require manual review.
-- Prefer a clear covered/not_covered result when the retrieved policy directly
-  supports it.
-- In coverage_reason, name the event, relevant coverage/exclusion, and source
-  filename when available. Keep the reason concise and professional.
+Important:
+- Do not return unclear merely because a short test description does not mention
+  routine documents, policy validity, or licence details.
+- Deductible, depreciation, repair estimate, surveyor assessment, and policy
+  limits normally affect settlement amount, not basic coverage.
+- Prefer covered or not_covered when the policy text clearly supports it.
+
+Your structured response must contain:
+
+coverage_status:
+One of covered, not_covered, or unclear.
+
+decision_summary:
+One clear sentence describing the result.
+
+detailed_explanation:
+Write 70 to 120 words in simple, professional English. Explain:
+- what happened;
+- why the policy covers, excludes, or cannot yet determine the claim;
+- how the retrieved clause applies to the submitted facts.
+Do not give only a short phrase or filename.
+
+policy_basis:
+State the most relevant policy clause or rule and source filename.
+Use a complete sentence.
+
+recommendation:
+Give one practical next step:
+- approved: proceed with normal settlement checks;
+- not_covered: explain that additional evidence may be submitted if the cause
+  of loss is different;
+- unclear: state exactly what information or human review is required.
 
 Claim details:
 Policy Number: {policy_number}
@@ -59,55 +70,3 @@ Claim Amount: {claim_amount}
 Retrieved policy documents:
 {policy_context}
 """
-
-
-# Retained for compatibility with older imports. The final decision is now
-# created deterministically in nodes.py and does not require another LLM call.
-FINAL_DECISION_PROMPT = """
-You are an experienced insurance claims officer.
-
-Your job is to make the final claim decision based ONLY on the coverage analysis below.
-
-Coverage Status:
-{coverage_status}
-
-Coverage Reason:
-{coverage_reason}
-
-Instructions:
-
-1. If coverage_status is "covered"
-   - final_decision = approved
-
-2. If coverage_status is "not_covered"
-   - final_decision = claim_not_covered
-
-3. If coverage_status is "unclear"
-   - final_decision = manual_review_required
-
-Write the final_reason in simple and professional English.
-
-The reason should include:
-
-• A one-line decision summary.
-• Why this decision was made.
-• Mention the policy clause or document if available.
-• Give a short recommendation for the customer.
-
-Keep the response between 60 and 120 words.
-
-Examples:
-
-Approved:
-"The claim is approved because the reported road accident is covered under the insurance policy. The available policy documents support the claim, and no exclusions were identified. The claim can proceed to settlement after applying the applicable deductible and surveyor assessment."
-
-Claim Not Covered:
-"The claim is not covered because the damage resulted from normal wear and tear, which is excluded under the insurance policy. The retrieved policy documents do not provide coverage for this type of damage. The customer may contact the insurer if additional supporting evidence is available."
-
-Manual Review Required:
-"The claim requires manual review because there is not enough information to make a final decision. Some required details or supporting documents are missing. A claim adjuster should review the case before the final decision is made."
-"""
-
-
-if __name__ == "__main__":
-    print(COVERAGE_ANALYSIS_PROMPT)

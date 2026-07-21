@@ -1,4 +1,4 @@
-"""LangGraph nodes for insurance claim retrieval and adjudication."""
+"""LangGraph nodes for retrieval and insurance claim adjudication."""
 
 from typing import Literal
 
@@ -11,33 +11,44 @@ from state import ClaimState
 
 
 class CoverageResult(BaseModel):
-    """Structured coverage result returned by the LLM."""
+    """Detailed structured result returned by the LLM."""
 
     coverage_status: Literal[
         "covered",
         "not_covered",
         "unclear",
-    ] = Field(
-        description=(
-            "Use covered for a clearly covered event, not_covered for a "
-            "clear exclusion, and unclear only when coverage cannot be "
-            "reliably determined from the supplied documents."
-        )
+    ]
+
+    decision_summary: str = Field(
+        min_length=10,
+        description="One clear sentence describing the coverage result.",
     )
 
-    coverage_reason: str = Field(
-        min_length=5,
+    detailed_explanation: str = Field(
+        min_length=80,
         description=(
-            "A concise reason grounded in the retrieved policy documents, "
-            "including the relevant source filename when possible."
+            "A detailed explanation in simple professional English, "
+            "grounded only in the retrieved documents."
         ),
+    )
+
+    policy_basis: str = Field(
+        min_length=10,
+        description=(
+            "The relevant policy clause or rule and source filename."
+        ),
+    )
+
+    recommendation: str = Field(
+        min_length=10,
+        description="One practical next step for the claim.",
     )
 
 
 FINAL_DECISION_MAP = {
     "covered": {
         "final_decision": "approved",
-        "confidence": 0.92,
+        "confidence": 0.94,
     },
     "not_covered": {
         "final_decision": "claim_not_covered",
@@ -45,15 +56,13 @@ FINAL_DECISION_MAP = {
     },
     "unclear": {
         "final_decision": "manual_review_required",
-        "confidence": 0.55,
+        "confidence": 0.58,
     },
 }
 
 
 def retrieve_policy_documents(state: ClaimState) -> dict:
-    """Retrieve relevant policy chunks using the incident details."""
-
-    print("\nRetrieval Node Started")
+    """Retrieve relevant coverage, exclusion and endorsement sections."""
 
     incident_type = str(state.get("incident_type", "")).strip()
     incident_description = str(
@@ -61,29 +70,20 @@ def retrieve_policy_documents(state: ClaimState) -> dict:
     ).strip()
 
     if not incident_description:
-        print("Incident description is missing.")
         return {
             "search_query": "",
             "retrieved_documents": [],
         }
 
-    # Add insurance-specific concepts to improve retrieval of coverage,
-    # exclusions, endorsements, conditions, and manual-review clauses.
     search_query = (
-        f"Private motor insurance claim. "
+        "Private motor insurance claim assessment. "
         f"Incident type: {incident_type}. "
-        f"Incident description: {incident_description}. "
-        "Find applicable basic coverage, exclusions, endorsements, "
-        "policy conditions, and manual review rules."
+        f"Incident facts: {incident_description}. "
+        "Retrieve relevant basic coverage, exclusions, endorsements, "
+        "conditions, required documents, settlement and manual-review rules."
     )
 
-    try:
-        retrieved_documents = search_policy(search_query)
-    except Exception as error:
-        print(f"Policy retrieval failed: {error}")
-        retrieved_documents = []
-
-    print(f"Documents Retrieved: {len(retrieved_documents)}")
+    retrieved_documents = search_policy(search_query)
 
     return {
         "search_query": search_query,
@@ -92,9 +92,9 @@ def retrieve_policy_documents(state: ClaimState) -> dict:
 
 
 def create_policy_context(retrieved_documents) -> str:
-    """Combine retrieved policy chunks into one grounded context block."""
+    """Create a grounded context block from retrieved documents."""
 
-    policy_context_parts = []
+    sections = []
 
     for index, document in enumerate(retrieved_documents, start=1):
         file_name = document.metadata.get(
@@ -110,7 +110,7 @@ def create_policy_context(retrieved_documents) -> str:
             "Unknown category",
         )
 
-        policy_context_parts.append(
+        sections.append(
             "\n".join(
                 [
                     f"Document {index}",
@@ -123,114 +123,168 @@ def create_policy_context(retrieved_documents) -> str:
             )
         )
 
-    return "\n\n---\n\n".join(policy_context_parts)
+    return "\n\n---\n\n".join(sections)
 
 
 def analyze_coverage(state: ClaimState) -> dict:
-    """Analyze claim coverage using retrieved policy documents."""
+    """Analyze coverage and create a detailed grounded explanation."""
 
-    print("\nCoverage Analysis Node Started")
-
-    retrieved_documents = state.get("retrieved_documents", [])
+    retrieved_documents = state.get(
+        "retrieved_documents",
+        [],
+    )
 
     if not retrieved_documents:
         return {
             "coverage_status": "unclear",
+            "decision_summary": (
+                "Coverage could not be determined automatically."
+            ),
             "coverage_reason": (
-                "No relevant policy documents were retrieved, so coverage "
-                "cannot be determined automatically."
+                "No relevant policy documents were retrieved. "
+                "The claim must be reviewed after the policy documents "
+                "and applicable clauses are made available."
+            ),
+            "policy_basis": (
+                "No policy source was available for this assessment."
+            ),
+            "recommendation": (
+                "Verify the policy-document index and refer the claim "
+                "to a human adjuster."
             ),
         }
 
-    policy_context = create_policy_context(retrieved_documents)
-
     prompt = COVERAGE_ANALYSIS_PROMPT.format(
-        policy_number=state.get("policy_number", "Not provided"),
-        incident_type=state.get("incident_type", "Not provided"),
+        policy_number=state.get(
+            "policy_number",
+            "Not provided",
+        ),
+        incident_type=state.get(
+            "incident_type",
+            "Not provided",
+        ),
         incident_description=state.get(
             "incident_description",
             "Not provided",
         ),
-        claim_amount=state.get("claim_amount", 0),
-        policy_context=policy_context,
+        claim_amount=state.get(
+            "claim_amount",
+            0,
+        ),
+        policy_context=create_policy_context(
+            retrieved_documents
+        ),
     )
 
     try:
-        llm = create_llm()
-        structured_llm = llm.with_structured_output(CoverageResult)
+        structured_llm = create_llm().with_structured_output(
+            CoverageResult
+        )
         result = structured_llm.invoke(prompt)
 
         if result is None:
-            raise ValueError("The LLM returned no structured coverage result.")
-
-        coverage_status = str(result.coverage_status).strip().lower()
-        coverage_reason = str(result.coverage_reason).strip()
-
-        if coverage_status not in FINAL_DECISION_MAP:
             raise ValueError(
-                f"Unexpected coverage status: {coverage_status}"
+                "The LLM returned no structured result."
             )
 
-        print(f"Coverage Status: {coverage_status}")
-        print(f"Coverage Reason: {coverage_reason}")
-
         return {
-            "coverage_status": coverage_status,
-            "coverage_reason": coverage_reason,
+            "coverage_status": result.coverage_status,
+            "decision_summary": result.decision_summary.strip(),
+            "coverage_reason": result.detailed_explanation.strip(),
+            "policy_basis": result.policy_basis.strip(),
+            "recommendation": result.recommendation.strip(),
         }
 
     except Exception as error:
-        # Keep the real error in Streamlit logs so configuration/model issues
-        # are visible instead of silently appearing as a normal manual review.
-        print(f"Coverage analysis failed: {type(error).__name__}: {error}")
+        print(
+            "Coverage analysis failed: "
+            f"{type(error).__name__}: {error}"
+        )
 
         return {
             "coverage_status": "unclear",
+            "decision_summary": (
+                "The automated analysis could not be completed."
+            ),
             "coverage_reason": (
-                "The automated coverage analysis could not be completed. "
-                f"Technical details: {type(error).__name__}: {error}"
+                "A technical issue prevented the AI from completing "
+                "the policy analysis. This is not a coverage denial. "
+                "The claim should be reviewed after the application "
+                "configuration or model connection is corrected."
+            ),
+            "policy_basis": (
+                "No reliable policy conclusion was produced because "
+                "the automated analysis failed."
+            ),
+            "recommendation": (
+                "Check the Groq API configuration and application logs, "
+                "then run the claim again."
             ),
         }
 
 
 def make_final_decision(state: ClaimState) -> dict:
-    """Map coverage status to a deterministic final decision."""
-
-    print("\nFinal Decision Node Started")
+    """Convert coverage status into a deterministic final decision."""
 
     coverage_status = str(
-        state.get("coverage_status", "unclear")
-    ).strip().lower()
-    coverage_reason = str(
         state.get(
-            "coverage_reason",
-            "Coverage information is unavailable.",
+            "coverage_status",
+            "unclear",
         )
-    ).strip()
+    ).strip().lower()
 
     decision = FINAL_DECISION_MAP.get(
         coverage_status,
         FINAL_DECISION_MAP["unclear"],
     )
 
-    final_result = {
+    summary = str(
+        state.get(
+            "decision_summary",
+            "Coverage assessment completed.",
+        )
+    ).strip()
+
+    explanation = str(
+        state.get(
+            "coverage_reason",
+            "Coverage information is unavailable.",
+        )
+    ).strip()
+
+    policy_basis = str(
+        state.get(
+            "policy_basis",
+            "Policy basis is unavailable.",
+        )
+    ).strip()
+
+    recommendation = str(
+        state.get(
+            "recommendation",
+            "Refer the claim for review.",
+        )
+    ).strip()
+
+    final_reason = (
+        f"{summary}\n\n"
+        f"{explanation}\n\n"
+        f"Policy basis: {policy_basis}\n\n"
+        f"Recommended next step: {recommendation}"
+    )
+
+    return {
         "final_decision": decision["final_decision"],
-        "final_reason": coverage_reason,
+        "final_reason": final_reason,
         "confidence": decision["confidence"],
     }
-
-    print(f"Final Decision: {final_result['final_decision']}")
-    print(f"Final Reason: {final_result['final_reason']}")
-    print(f"Confidence: {final_result['confidence']}")
-
-    return final_result
 
 
 def create_fallback_decision(
     coverage_status: str,
     coverage_reason: str,
 ) -> dict:
-    """Backward-compatible wrapper around the deterministic decision map."""
+    """Backward-compatible fallback helper."""
 
     return make_final_decision(
         {
@@ -238,28 +292,3 @@ def create_fallback_decision(
             "coverage_reason": coverage_reason,
         }
     )
-
-
-if __name__ == "__main__":
-    test_state: ClaimState = {
-        "policy_number": "POL-1001",
-        "customer_name": "Satish Salunkhe",
-        "incident_type": "Road Accident",
-        "incident_description": (
-            "The insured car collided with another vehicle and the front "
-            "bumper and headlight were damaged."
-        ),
-        "claim_amount": 75000.0,
-    }
-
-    retrieval_result = retrieve_policy_documents(test_state)
-    test_state.update(retrieval_result)
-
-    coverage_result = analyze_coverage(test_state)
-    test_state.update(coverage_result)
-
-    decision_result = make_final_decision(test_state)
-    test_state.update(decision_result)
-
-    print("\nComplete Final State")
-    print(test_state)

@@ -5,122 +5,188 @@ from llm import create_llm
 from state import ClaimState
 
 
-# ---------------------------------------------------------
-# PAGE SETTINGS
-# ---------------------------------------------------------
-
 st.set_page_config(
     page_title="ClaimGuard AI",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 
 # ---------------------------------------------------------
-# HELPER FUNCTIONS
+# ENTERPRISE UI
 # ---------------------------------------------------------
 
-def format_text(value: str) -> str:
+st.markdown(
     """
-    Convert values like manual_review_required
-    into Manual Review Required.
-    """
+    <style>
+    :root {
+        --navy: #12355B;
+        --navy-hover: #0B2745;
+        --blue: #1F5F99;
+        --surface: #151A22;
+        --border: #303846;
+    }
 
+    .stApp {
+        background: #0E131B;
+    }
+
+    div.stButton > button,
+    div.stFormSubmitButton > button {
+        background: var(--navy) !important;
+        border: 1px solid #2C5E8F !important;
+        color: white !important;
+        border-radius: 8px !important;
+        font-weight: 650 !important;
+        min-height: 48px !important;
+        box-shadow: none !important;
+    }
+
+    div.stButton > button:hover,
+    div.stFormSubmitButton > button:hover {
+        background: var(--navy-hover) !important;
+        border-color: #4B82B6 !important;
+        color: white !important;
+    }
+
+    div.stButton > button:focus,
+    div.stFormSubmitButton > button:focus {
+        box-shadow: 0 0 0 3px rgba(31, 95, 153, 0.28) !important;
+    }
+
+    [data-testid="stMetric"] {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px;
+    }
+
+    [data-testid="stForm"] {
+        background: #121821;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+    }
+
+    .decision-card {
+        border-radius: 10px;
+        padding: 18px 20px;
+        font-size: 18px;
+        font-weight: 700;
+        margin: 8px 0 20px 0;
+    }
+
+    .approved-card {
+        background: rgba(25, 135, 84, 0.17);
+        border: 1px solid rgba(46, 204, 113, 0.55);
+        color: #73E2A7;
+    }
+
+    .denied-card {
+        background: rgba(180, 45, 55, 0.17);
+        border: 1px solid rgba(225, 83, 97, 0.55);
+        color: #FF8E99;
+    }
+
+    .review-card {
+        background: rgba(176, 126, 16, 0.18);
+        border: 1px solid rgba(240, 185, 55, 0.55);
+        color: #FFD36A;
+    }
+
+    .explanation-card {
+        background: #141D28;
+        border: 1px solid #30465E;
+        border-left: 4px solid #2F75B5;
+        border-radius: 9px;
+        padding: 20px;
+        line-height: 1.7;
+        margin-top: 8px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def display_name(value: str) -> str:
     if not value:
         return "Not Available"
-
     return value.replace("_", " ").title()
 
 
 @st.cache_resource
-def check_application_status():
-    """
-    Check whether the Groq LLM can be created.
-    """
-
+def application_health():
     try:
         create_llm()
-        return True, "Application is connected to the Groq LLM."
-
+        return True, "Groq LLM connection is configured."
     except Exception as error:
         return False, str(error)
 
 
 def show_application_status():
-    """
-    Show application status:
-    Online  -> Green
-    Offline -> Red
-    """
+    online, message = application_health()
 
-    is_online, status_message = check_application_status()
-
-    if is_online:
-        st.success("🟢 Application Online")
+    if online:
+        st.success("● Application Online")
     else:
-        st.error("🔴 Application Offline")
+        st.error("● Application Offline")
+        with st.expander("Status details"):
+            st.write(message)
 
-        with st.expander("View Error Details"):
-            st.write(status_message)
 
+def show_decision_card(decision: str):
+    normalized = (decision or "").strip().lower()
 
-def show_final_decision(final_decision: str):
-    """
-    Show the final decision using colors.
-
-    Approved               -> Green
-    Claim Not Covered      -> Red
-    Manual Review Required -> Yellow
-    """
-
-    decision = (
-        final_decision or ""
-    ).strip().lower()
-
-    if decision == "approved":
-        st.success("✅ Claim Approved")
-
-    elif decision == "claim_not_covered":
-        st.error("❌ Claim Not Covered")
-
-    elif decision == "manual_review_required":
-        st.warning("⚠️ Manual Review Required")
-
+    if normalized == "approved":
+        css_class = "approved-card"
+        text = "✓ Claim Approved"
+    elif normalized == "claim_not_covered":
+        css_class = "denied-card"
+        text = "✕ Claim Not Covered"
     else:
-        st.info(
-            f"ℹ️ {format_text(decision)}"
-        )
+        css_class = "review-card"
+        text = "⚠ Manual Review Required"
+
+    st.markdown(
+        f'<div class="decision-card {css_class}">{text}</div>',
+        unsafe_allow_html=True,
+    )
 
 
-def show_policy_sources(retrieved_documents):
-    """
-    Display the policy documents used by the agent.
-    """
+def show_explanation(text: str):
+    safe_text = (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\n", "<br>")
+    )
 
-    if not retrieved_documents:
-        st.info(
-            "No relevant policy documents were retrieved."
-        )
+    st.markdown(
+        f'<div class="explanation-card">{safe_text}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def show_policy_sources(documents):
+    if not documents:
+        st.info("No relevant policy documents were retrieved.")
         return
 
     st.caption(
-        f"{len(retrieved_documents)} policy sections "
-        "were used for this claim analysis."
+        f"{len(documents)} policy sections were used "
+        "for this claim analysis."
     )
 
-    for index, document in enumerate(
-        retrieved_documents,
-        start=1
-    ):
+    for index, document in enumerate(documents, start=1):
         file_name = document.metadata.get(
             "file_name",
-            "Unknown Source"
+            "Unknown Source",
         )
-
         source = document.metadata.get(
             "source",
-            "Source path not available"
+            "Source path not available",
         )
 
         with st.expander(
@@ -130,115 +196,64 @@ def show_policy_sources(retrieved_documents):
             st.write(document.page_content)
 
 
-# ---------------------------------------------------------
-# SIDEBAR
-# ---------------------------------------------------------
-
 with st.sidebar:
-
     st.title("🛡️ ClaimGuard AI")
-
-    st.caption(
-        "Insurance Claims Adjudication Agent"
-    )
-
+    st.caption("Insurance Claims Adjudication Agent")
     st.divider()
-
-    st.subheader("Navigation")
-
     st.button(
-        "📄 New Claim",
-        use_container_width=True
-    )
-
-    st.button(
-        "📑 Claim History",
+        "New Claim",
         use_container_width=True,
-        disabled=True
     )
-
     st.button(
-        "📚 Policy Documents",
+        "Claim History",
         use_container_width=True,
-        disabled=True
+        disabled=True,
     )
-
     st.button(
-        "📊 Dashboard",
+        "Policy Documents",
         use_container_width=True,
-        disabled=True
+        disabled=True,
     )
-
     st.divider()
+    st.caption("Version 1.1")
 
-    st.caption("Version 1.0")
 
+header, health = st.columns([4, 1])
 
-# ---------------------------------------------------------
-# HEADER
-# ---------------------------------------------------------
-
-header_column, status_column = st.columns(
-    [4, 1]
-)
-
-with header_column:
-
+with header:
     st.title("Insurance Claims Adjudication")
-
     st.write(
-        """
-        Submit a private motor insurance claim and receive
-        an AI-assisted coverage analysis based on the
-        available policy documents.
-        """
+        "Submit a private motor claim for a grounded, "
+        "AI-assisted policy assessment."
     )
 
-with status_column:
+with health:
     show_application_status()
 
-
 st.divider()
-
-
-# ---------------------------------------------------------
-# CLAIM FORM
-# ---------------------------------------------------------
-
 st.subheader("New Claim")
 
-st.caption(
-    "Enter the customer, policy and incident details."
-)
-
-
 with st.form("claim_form"):
+    left, right = st.columns(2)
 
-    customer_column, policy_column = st.columns(2)
-
-    with customer_column:
-
+    with left:
         customer_name = st.text_input(
             "Customer Name *",
-            placeholder="Example: Rahul Sharma"
+            placeholder="Example: Rahul Sharma",
         )
 
-    with policy_column:
-
+    with right:
         policy_number = st.text_input(
             "Policy Number *",
-            placeholder="Example: POL-1001"
+            placeholder="Example: POL-1001",
         )
 
-    incident_column, amount_column = st.columns(
-        [2, 1]
-    )
+    incident_col, amount_col = st.columns([2, 1])
 
-    with incident_column:
-
+    with incident_col:
         incident_type = st.selectbox(
             "Incident Type *",
-            options=[
+            [
                 "Road Accident",
                 "Flood Damage",
                 "Theft",
@@ -246,77 +261,61 @@ with st.form("claim_form"):
                 "Engine Damage",
                 "Natural Disaster",
                 "Third-Party Damage",
-                "Other"
-            ]
+                "Other",
+            ],
         )
 
-    with amount_column:
-
+    with amount_col:
         claim_amount = st.number_input(
             "Claim Amount ₹ *",
             min_value=0.0,
             step=1000.0,
-            format="%.2f"
+            format="%.2f",
         )
 
     incident_description = st.text_area(
         "Incident Description *",
         placeholder=(
-            "Explain what happened, where it happened, "
-            "the damage caused and the documents submitted."
+            "Explain what happened, the damage caused, "
+            "and any relevant documents or circumstances."
         ),
-        height=160
+        height=150,
     )
 
-    confirm_details = st.checkbox(
+    confirmed = st.checkbox(
         "I confirm that the entered claim details are correct."
     )
 
     submitted = st.form_submit_button(
         "Analyze Claim",
         type="primary",
-        use_container_width=True
+        use_container_width=True,
     )
 
 
-# ---------------------------------------------------------
-# CLAIM PROCESSING
-# ---------------------------------------------------------
-
 if submitted:
-
     errors = []
 
     if not customer_name.strip():
         errors.append("Customer name is required.")
-
     if not policy_number.strip():
         errors.append("Policy number is required.")
-
     if not incident_description.strip():
         errors.append("Incident description is required.")
-
     if claim_amount <= 0:
         errors.append(
             "Claim amount must be greater than zero."
         )
-
-    if not confirm_details:
+    if not confirmed:
         errors.append(
-            "Please confirm that the claim details are correct."
+            "Please confirm the claim details."
         )
 
     if errors:
-
-        st.error(
-            "Please correct the following details:"
-        )
-
+        st.error("Please correct the following:")
         for error in errors:
             st.write(f"- {error}")
-
     else:
-
         initial_state: ClaimState = {
             "policy_number": policy_number.strip(),
             "customer_name": customer_name.strip(),
@@ -324,277 +323,140 @@ if submitted:
             "incident_description": (
                 incident_description.strip()
             ),
-            "claim_amount": float(claim_amount)
+            "claim_amount": float(claim_amount),
         }
 
         try:
-
             with st.status(
-                "Processing insurance claim...",
-                expanded=True
-            ) as processing_status:
-
-                st.write(
-                    "1. Claim details received."
-                )
-
-                st.write(
-                    "2. Searching relevant policy documents."
-                )
-
-                final_state = claim_graph.invoke(
-                    initial_state
-                )
-
-                st.write(
-                    "3. Coverage analysis completed."
-                )
-
-                st.write(
-                    "4. Final decision created."
-                )
-
-                processing_status.update(
-                    label="Claim processing completed",
+                "Analyzing claim...",
+                expanded=True,
+            ) as status:
+                st.write("Retrieving relevant policy sections...")
+                final_state = claim_graph.invoke(initial_state)
+                st.write("Applying policy coverage rules...")
+                st.write("Preparing the final explanation...")
+                status.update(
+                    label="Claim analysis completed",
                     state="complete",
-                    expanded=False
+                    expanded=False,
                 )
-
-            st.divider()
-
-            # -------------------------------------------------
-            # RESULT VALUES
-            # -------------------------------------------------
 
             final_decision = final_state.get(
                 "final_decision",
-                "manual_review_required"
+                "manual_review_required",
             )
-
             coverage_status = final_state.get(
                 "coverage_status",
-                "unclear"
+                "unclear",
             )
-
-            coverage_reason = final_state.get(
-                "coverage_reason",
-                "Coverage reason is not available."
-            )
-
-            final_reason = final_state.get(
-                "final_reason",
-                "Final explanation is not available."
-            )
-
             confidence = float(
                 final_state.get(
                     "confidence",
-                    0
+                    0,
                 )
             )
 
-            # -------------------------------------------------
-            # MAIN RESULT
-            # -------------------------------------------------
-
+            st.divider()
             st.subheader("Claim Result")
+            show_decision_card(final_decision)
 
-            show_final_decision(
-                final_decision
-            )
+            col1, col2, col3 = st.columns(3)
 
-            # -------------------------------------------------
-            # CLAIM SUMMARY
-            # -------------------------------------------------
-
-            st.subheader("Claim Summary")
-
-            summary_column1, summary_column2 = st.columns(2)
-
-            with summary_column1:
-
-                st.text_input(
-                    "Customer Name",
-                    value=final_state.get(
-                        "customer_name",
-                        "Not Available"
-                    ),
-                    disabled=True
-                )
-
-                st.text_input(
-                    "Incident Type",
-                    value=final_state.get(
-                        "incident_type",
-                        "Not Available"
-                    ),
-                    disabled=True
-                )
-
-            with summary_column2:
-
-                st.text_input(
-                    "Policy Number",
-                    value=final_state.get(
-                        "policy_number",
-                        "Not Available"
-                    ),
-                    disabled=True
-                )
-
-                st.text_input(
-                    "Claim Amount",
-                    value=(
-                        f"₹{final_state.get('claim_amount', 0):,.2f}"
-                    ),
-                    disabled=True
-                )
-
-            metric_column1, metric_column2, metric_column3 = (
-                st.columns(3)
-            )
-
-            with metric_column1:
-
+            with col1:
                 st.metric(
                     "Final Decision",
-                    format_text(
-                        final_decision
-                    )
+                    display_name(final_decision),
                 )
-
-            with metric_column2:
-
+            with col2:
                 st.metric(
                     "Coverage Status",
-                    format_text(
-                        coverage_status
-                    )
+                    display_name(coverage_status),
                 )
-
-            with metric_column3:
-
+            with col3:
                 st.metric(
                     "Confidence",
-                    f"{confidence * 100:.0f}%"
+                    f"{confidence * 100:.0f}%",
                 )
 
             st.progress(
-                min(
-                    max(confidence, 0.0),
-                    1.0
-                )
+                min(max(confidence, 0.0), 1.0)
             )
-
-            # -------------------------------------------------
-            # DETAIL TABS
-            # -------------------------------------------------
 
             analysis_tab, decision_tab, sources_tab = st.tabs(
                 [
                     "Coverage Analysis",
                     "Final Decision",
-                    "Policy Sources"
+                    "Policy Sources",
                 ]
             )
 
             with analysis_tab:
-
                 st.subheader("Coverage Analysis")
-
-                if coverage_status == "covered":
-                    st.success(
-                        f"Coverage Status: "
-                        f"{format_text(coverage_status)}"
+                st.markdown("#### Detailed assessment")
+                show_explanation(
+                    final_state.get(
+                        "coverage_reason",
+                        "No explanation is available.",
                     )
+                )
 
-                elif coverage_status == "not_covered":
-                    st.error(
-                        f"Coverage Status: "
-                        f"{format_text(coverage_status)}"
+                st.markdown("#### Policy basis")
+                st.write(
+                    final_state.get(
+                        "policy_basis",
+                        "Policy basis is unavailable.",
                     )
+                )
 
-                else:
-                    st.warning(
-                        f"Coverage Status: "
-                        f"{format_text(coverage_status)}"
+                st.markdown("#### Recommended next step")
+                st.write(
+                    final_state.get(
+                        "recommendation",
+                        "Refer the claim for review.",
                     )
-
-                st.markdown("### Analysis")
-
-                st.info(coverage_reason)
+                )
 
             with decision_tab:
-
                 st.subheader("Final Decision")
-
-                show_final_decision(
-                    final_decision
-                )
-
-                st.markdown("### Explanation")
-
-                st.info(final_reason)
-
-                st.markdown("### Confidence")
-
-                st.write(
-                    f"{confidence * 100:.0f}%"
-                )
-
-                st.progress(
-                    min(
-                        max(confidence, 0.0),
-                        1.0
+                show_decision_card(final_decision)
+                st.markdown("#### Decision explanation")
+                show_explanation(
+                    final_state.get(
+                        "final_reason",
+                        "No final explanation is available.",
                     )
                 )
-
-                st.caption(
-                    "The final decision is based on the "
-                    "retrieved policy documents and the "
-                    "submitted claim details."
+                st.markdown("#### Confidence")
+                st.write(f"{confidence * 100:.0f}%")
+                st.progress(
+                    min(max(confidence, 0.0), 1.0)
                 )
 
             with sources_tab:
-
                 st.subheader(
                     "Retrieved Policy Documents"
                 )
-
-                retrieved_documents = final_state.get(
-                    "retrieved_documents",
-                    []
-                )
-
                 show_policy_sources(
-                    retrieved_documents
+                    final_state.get(
+                        "retrieved_documents",
+                        [],
+                    )
                 )
 
         except Exception as error:
-
             st.error(
                 "The claim analysis could not be completed."
             )
-
             st.warning(
-                "Check the Groq API key, vector database "
-                "and Streamlit application logs."
+                "Check the API key, vector database, "
+                "and Streamlit logs."
             )
-
-            with st.expander(
-                "View Technical Error"
-            ):
+            with st.expander("Technical details"):
                 st.exception(error)
 
 
-# ---------------------------------------------------------
-# FOOTER
-# ---------------------------------------------------------
-
 st.divider()
-
 st.caption(
     "ClaimGuard AI is a demonstration application. "
-    "Final insurance decisions should be verified by "
-    "an authorized insurance adjuster."
+    "Final decisions should be verified by an authorized adjuster."
 )
