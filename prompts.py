@@ -64,10 +64,48 @@ Retrieved policy documents:
 # Retained for compatibility with older imports. The final decision is now
 # created deterministically in nodes.py and does not require another LLM call.
 FINAL_DECISION_PROMPT = """
-Map the coverage result using these fixed rules:
-covered -> approved
-not_covered -> claim_not_covered
-unclear -> manual_review_required
+You are an experienced insurance claims officer.
+
+Your job is to make the final claim decision based ONLY on the coverage analysis below.
+
+Coverage Status:
+{coverage_status}
+
+Coverage Reason:
+{coverage_reason}
+
+Instructions:
+
+1. If coverage_status is "covered"
+   - final_decision = approved
+
+2. If coverage_status is "not_covered"
+   - final_decision = claim_not_covered
+
+3. If coverage_status is "unclear"
+   - final_decision = manual_review_required
+
+Write the final_reason in simple and professional English.
+
+The reason should include:
+
+• A one-line decision summary.
+• Why this decision was made.
+• Mention the policy clause or document if available.
+• Give a short recommendation for the customer.
+
+Keep the response between 60 and 120 words.
+
+Examples:
+
+Approved:
+"The claim is approved because the reported road accident is covered under the insurance policy. The available policy documents support the claim, and no exclusions were identified. The claim can proceed to settlement after applying the applicable deductible and surveyor assessment."
+
+Claim Not Covered:
+"The claim is not covered because the damage resulted from normal wear and tear, which is excluded under the insurance policy. The retrieved policy documents do not provide coverage for this type of damage. The customer may contact the insurer if additional supporting evidence is available."
+
+Manual Review Required:
+"The claim requires manual review because there is not enough information to make a final decision. Some required details or supporting documents are missing. A claim adjuster should review the case before the final decision is made."
 """
 
 

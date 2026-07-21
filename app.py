@@ -6,7 +6,7 @@ from state import ClaimState
 
 
 # ---------------------------------------------------------
-# PAGE CONFIGURATION
+# PAGE SETTINGS
 # ---------------------------------------------------------
 
 st.set_page_config(
@@ -21,9 +21,9 @@ st.set_page_config(
 # HELPER FUNCTIONS
 # ---------------------------------------------------------
 
-def format_status(value: str) -> str:
+def format_text(value: str) -> str:
     """
-    Convert values such as manual_review_required
+    Convert values like manual_review_required
     into Manual Review Required.
     """
 
@@ -36,15 +36,12 @@ def format_status(value: str) -> str:
 @st.cache_resource
 def check_application_status():
     """
-    Check whether the Groq LLM can be initialized.
-
-    Returns:
-        tuple[bool, str]: application status and status message
+    Check whether the Groq LLM can be created.
     """
 
     try:
         create_llm()
-        return True, "Application Online"
+        return True, "Application is connected to the Groq LLM."
 
     except Exception as error:
         return False, str(error)
@@ -52,8 +49,9 @@ def check_application_status():
 
 def show_application_status():
     """
-    Display application status in green when online
-    and red when offline.
+    Show application status:
+    Online  -> Green
+    Offline -> Red
     """
 
     is_online, status_message = check_application_status()
@@ -63,41 +61,41 @@ def show_application_status():
     else:
         st.error("🔴 Application Offline")
 
-        with st.expander("View Status Details"):
+        with st.expander("View Error Details"):
             st.write(status_message)
 
 
-def show_decision_status(final_decision: str):
+def show_final_decision(final_decision: str):
     """
-    Display the final claim decision with color coding.
+    Show the final decision using colors.
 
-    Approved              -> Green
-    Claim Not Covered     -> Red
-    Manual Review Required-> Yellow
+    Approved               -> Green
+    Claim Not Covered      -> Red
+    Manual Review Required -> Yellow
     """
 
-    normalized_decision = (
+    decision = (
         final_decision or ""
     ).strip().lower()
 
-    if normalized_decision == "approved":
+    if decision == "approved":
         st.success("✅ Claim Approved")
 
-    elif normalized_decision == "claim_not_covered":
+    elif decision == "claim_not_covered":
         st.error("❌ Claim Not Covered")
 
-    elif normalized_decision == "manual_review_required":
+    elif decision == "manual_review_required":
         st.warning("⚠️ Manual Review Required")
 
     else:
         st.info(
-            f"ℹ️ {format_status(normalized_decision)}"
+            f"ℹ️ {format_text(decision)}"
         )
 
 
 def show_policy_sources(retrieved_documents):
     """
-    Display the policy documents retrieved by the RAG system.
+    Display the policy documents used by the agent.
     """
 
     if not retrieved_documents:
@@ -190,14 +188,13 @@ with header_column:
 
     st.write(
         """
-        Submit a motor insurance claim and receive an
-        AI-assisted coverage analysis based on the available
-        policy documents.
+        Submit a private motor insurance claim and receive
+        an AI-assisted coverage analysis based on the
+        available policy documents.
         """
     )
 
 with status_column:
-
     show_application_status()
 
 
@@ -205,13 +202,13 @@ st.divider()
 
 
 # ---------------------------------------------------------
-# NEW CLAIM FORM
+# CLAIM FORM
 # ---------------------------------------------------------
 
 st.subheader("New Claim")
 
 st.caption(
-    "Enter the customer, policy and incident details below."
+    "Enter the customer, policy and incident details."
 )
 
 
@@ -242,7 +239,7 @@ with st.form("claim_form"):
         incident_type = st.selectbox(
             "Incident Type *",
             options=[
-                "Accident Damage",
+                "Road Accident",
                 "Flood Damage",
                 "Theft",
                 "Fire Damage",
@@ -265,8 +262,8 @@ with st.form("claim_form"):
     incident_description = st.text_area(
         "Incident Description *",
         placeholder=(
-            "Describe what happened, where it happened "
-            "and how the vehicle was damaged."
+            "Explain what happened, where it happened, "
+            "the damage caused and the documents submitted."
         ),
         height=160
     )
@@ -288,41 +285,35 @@ with st.form("claim_form"):
 
 if submitted:
 
-    validation_errors = []
+    errors = []
 
     if not customer_name.strip():
-        validation_errors.append(
-            "Customer name is required."
-        )
+        errors.append("Customer name is required.")
 
     if not policy_number.strip():
-        validation_errors.append(
-            "Policy number is required."
-        )
+        errors.append("Policy number is required.")
 
     if not incident_description.strip():
-        validation_errors.append(
-            "Incident description is required."
-        )
+        errors.append("Incident description is required.")
 
     if claim_amount <= 0:
-        validation_errors.append(
+        errors.append(
             "Claim amount must be greater than zero."
         )
 
     if not confirm_details:
-        validation_errors.append(
+        errors.append(
             "Please confirm that the claim details are correct."
         )
 
-    if validation_errors:
+    if errors:
 
         st.error(
             "Please correct the following details:"
         )
 
-        for validation_error in validation_errors:
-            st.write(f"- {validation_error}")
+        for error in errors:
+            st.write(f"- {error}")
 
     else:
 
@@ -341,14 +332,14 @@ if submitted:
             with st.status(
                 "Processing insurance claim...",
                 expanded=True
-            ) as status:
+            ) as processing_status:
 
                 st.write(
-                    "1. Claim information received."
+                    "1. Claim details received."
                 )
 
                 st.write(
-                    "2. Retrieving relevant policy documents."
+                    "2. Searching relevant policy documents."
                 )
 
                 final_state = claim_graph.invoke(
@@ -360,10 +351,10 @@ if submitted:
                 )
 
                 st.write(
-                    "4. Final decision generated."
+                    "4. Final decision created."
                 )
 
-                status.update(
+                processing_status.update(
                     label="Claim processing completed",
                     state="complete",
                     expanded=False
@@ -372,10 +363,8 @@ if submitted:
             st.divider()
 
             # -------------------------------------------------
-            # CLAIM RESULT
+            # RESULT VALUES
             # -------------------------------------------------
-
-            st.subheader("Claim Result")
 
             final_decision = final_state.get(
                 "final_decision",
@@ -387,6 +376,16 @@ if submitted:
                 "unclear"
             )
 
+            coverage_reason = final_state.get(
+                "coverage_reason",
+                "Coverage reason is not available."
+            )
+
+            final_reason = final_state.get(
+                "final_reason",
+                "Final explanation is not available."
+            )
+
             confidence = float(
                 final_state.get(
                     "confidence",
@@ -394,7 +393,13 @@ if submitted:
                 )
             )
 
-            show_decision_status(
+            # -------------------------------------------------
+            # MAIN RESULT
+            # -------------------------------------------------
+
+            st.subheader("Claim Result")
+
+            show_final_decision(
                 final_decision
             )
 
@@ -453,7 +458,7 @@ if submitted:
 
                 st.metric(
                     "Final Decision",
-                    format_status(
+                    format_text(
                         final_decision
                     )
                 )
@@ -462,7 +467,7 @@ if submitted:
 
                 st.metric(
                     "Coverage Status",
-                    format_status(
+                    format_text(
                         coverage_status
                     )
                 )
@@ -482,7 +487,7 @@ if submitted:
             )
 
             # -------------------------------------------------
-            # RESULT DETAILS
+            # DETAIL TABS
             # -------------------------------------------------
 
             analysis_tab, decision_tab, sources_tab = st.tabs(
@@ -497,33 +502,57 @@ if submitted:
 
                 st.subheader("Coverage Analysis")
 
-                st.write(
-                    final_state.get(
-                        "coverage_reason",
-                        "Coverage reason is not available."
+                if coverage_status == "covered":
+                    st.success(
+                        f"Coverage Status: "
+                        f"{format_text(coverage_status)}"
                     )
-                )
+
+                elif coverage_status == "not_covered":
+                    st.error(
+                        f"Coverage Status: "
+                        f"{format_text(coverage_status)}"
+                    )
+
+                else:
+                    st.warning(
+                        f"Coverage Status: "
+                        f"{format_text(coverage_status)}"
+                    )
+
+                st.markdown("### Analysis")
+
+                st.info(coverage_reason)
 
             with decision_tab:
 
                 st.subheader("Final Decision")
 
-                # Colored final-decision box inside the tab
-                show_decision_status(
+                show_final_decision(
                     final_decision
                 )
 
-                st.write(
-                    f"**Reason:** "
-                    f"{final_state.get(
-                        'final_reason',
-                        'Final reason is not available.'
-                    )}"
-                )
+                st.markdown("### Explanation")
+
+                st.info(final_reason)
+
+                st.markdown("### Confidence")
 
                 st.write(
-                    f"**Confidence:** "
                     f"{confidence * 100:.0f}%"
+                )
+
+                st.progress(
+                    min(
+                        max(confidence, 0.0),
+                        1.0
+                    )
+                )
+
+                st.caption(
+                    "The final decision is based on the "
+                    "retrieved policy documents and the "
+                    "submitted claim details."
                 )
 
             with sources_tab:
@@ -548,7 +577,8 @@ if submitted:
             )
 
             st.warning(
-                "Check the API key, vector database and application logs."
+                "Check the Groq API key, vector database "
+                "and Streamlit application logs."
             )
 
             with st.expander(
