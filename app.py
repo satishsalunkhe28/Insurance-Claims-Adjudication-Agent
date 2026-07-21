@@ -1,6 +1,7 @@
 import streamlit as st
 
 from graph import claim_graph
+from llm import create_llm
 from state import ClaimState
 
 
@@ -32,19 +33,66 @@ def format_status(value: str) -> str:
     return value.replace("_", " ").title()
 
 
+@st.cache_resource
+def check_application_status():
+    """
+    Check whether the Groq LLM can be initialized.
+
+    Returns:
+        tuple[bool, str]: application status and status message
+    """
+
+    try:
+        create_llm()
+        return True, "Application Online"
+
+    except Exception as error:
+        return False, str(error)
+
+
+def show_application_status():
+    """
+    Display application status in green when online
+    and red when offline.
+    """
+
+    is_online, status_message = check_application_status()
+
+    if is_online:
+        st.success("🟢 Application Online")
+    else:
+        st.error("🔴 Application Offline")
+
+        with st.expander("View Status Details"):
+            st.write(status_message)
+
+
 def show_decision_status(final_decision: str):
     """
-    Display the final claim status.
+    Display the final claim decision with color coding.
+
+    Approved              -> Green
+    Claim Not Covered     -> Red
+    Manual Review Required-> Yellow
     """
 
-    if final_decision == "approved":
+    normalized_decision = (
+        final_decision or ""
+    ).strip().lower()
+
+    if normalized_decision == "approved":
         st.success("✅ Claim Approved")
 
-    elif final_decision == "claim_not_covered":
+    elif normalized_decision == "claim_not_covered":
         st.error("❌ Claim Not Covered")
 
-    else:
+    elif normalized_decision == "manual_review_required":
         st.warning("⚠️ Manual Review Required")
+
+    else:
+        st.info(
+            f"ℹ️ {format_status(normalized_decision)}"
+        )
 
 
 def show_policy_sources(retrieved_documents):
@@ -53,7 +101,9 @@ def show_policy_sources(retrieved_documents):
     """
 
     if not retrieved_documents:
-        st.info("No relevant policy documents were retrieved.")
+        st.info(
+            "No relevant policy documents were retrieved."
+        )
         return
 
     st.caption(
@@ -131,7 +181,7 @@ with st.sidebar:
 # ---------------------------------------------------------
 
 header_column, status_column = st.columns(
-    [5, 1]
+    [4, 1]
 )
 
 with header_column:
@@ -148,10 +198,7 @@ with header_column:
 
 with status_column:
 
-    st.metric(
-        label="Application",
-        value="Online"
-    )
+    show_application_status()
 
 
 st.divider()
@@ -461,9 +508,9 @@ if submitted:
 
                 st.subheader("Final Decision")
 
-                st.write(
-                    f"**Decision:** "
-                    f"{format_status(final_decision)}"
+                # Colored final-decision box inside the tab
+                show_decision_status(
+                    final_decision
                 )
 
                 st.write(
@@ -501,7 +548,7 @@ if submitted:
             )
 
             st.warning(
-                "Check the API key, vector database and terminal logs."
+                "Check the API key, vector database and application logs."
             )
 
             with st.expander(
